@@ -87,58 +87,6 @@
     return out;
   }
 
-  /* ---------- local SVG route map (replaces Leaflet + tiles) ---------- */
-  function routeSVG(slice) {
-    var pts = [];
-    slice.forEach(function (n, i) {
-      var c = n[5];
-      if (c) pts.push({ lat: c[0], lng: c[1], node: n, first: i === 0, last: i === slice.length - 1 });
-    });
-    if (pts.length < 2) return '<div class="route-empty">Kartenskizze nicht verfügbar</div>';
-    var meanLat = pts.reduce(function (s, p) { return s + p.lat; }, 0) / pts.length;
-    var k = Math.cos(meanLat * Math.PI / 180);
-    // project to equirectangular space, then rotate so the overall course runs
-    // left→right (this is a schematic, not a north-up map) to use the width well.
-    var raw = pts.map(function (p) { return { x: p.lng * k, y: p.lat, p: p }; });
-    var fx = raw[0].x, fy = raw[0].y;
-    var lst = raw[raw.length - 1];
-    var ang = -Math.atan2(lst.y - fy, lst.x - fx);
-    var ca = Math.cos(ang), sa = Math.sin(ang);
-    var rot = raw.map(function (r) {
-      var ox = r.x - fx, oy = r.y - fy;
-      return { x: ox * ca - oy * sa, y: ox * sa + oy * ca, p: r.p };
-    });
-    var xs = rot.map(function (r) { return r.x; });
-    var ys = rot.map(function (r) { return r.y; });
-    var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
-    var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
-    var dx = (maxX - minX) || 1e-4, dy = (maxY - minY) || 1e-4;
-    var pad = 18, maxW = 600, maxH = 150, innerW = maxW - pad * 2, innerH = maxH - pad * 2;
-    var scale = (dx / dy > innerW / innerH) ? innerW / dx : innerH / dy;
-    var boxW = dx * scale + pad * 2, boxH = dy * scale + pad * 2;
-    var P = rot.map(function (r) {
-      return { x: pad + (r.x - minX) * scale, y: pad + (maxY - r.y) * scale, p: r.p };
-    });
-    var d = P.map(function (q, i) { return (i ? "L" : "M") + q.x.toFixed(1) + " " + q.y.toFixed(1); }).join(" ");
-    var marks = P.map(function (q) {
-      var n = q.p.node, isPort = n[2] === "port", end = q.p.first || q.p.last;
-      if (isPort) {
-        return '<rect x="' + (q.x - 4).toFixed(1) + '" y="' + (q.y - 4).toFixed(1) + '" width="8" height="8" ' +
-          'transform="rotate(45 ' + q.x.toFixed(1) + ' ' + q.y.toFixed(1) + ')" ' +
-          'fill="rgba(122,46,34,.85)" stroke="var(--paper)" stroke-width="1.5" />';
-      }
-      return '<circle cx="' + q.x.toFixed(1) + '" cy="' + q.y.toFixed(1) + '" r="' + (end ? 6 : 4) + '" ' +
-        'fill="' + (end ? "var(--accent2)" : "var(--paper)") + '" ' +
-        'stroke="' + (end ? "var(--accent2)" : "var(--accent)") + '" stroke-width="3" />';
-    }).join("");
-    return '<svg class="route-svg" viewBox="0 0 ' + boxW.toFixed(1) + ' ' + boxH.toFixed(1) + '" ' +
-      'preserveAspectRatio="xMidYMid meet" role="img" aria-label="Streckenskizze ' +
-      esc(slice[0][0]) + " bis " + esc(slice[slice.length - 1][0]) + '">' +
-      '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="4" ' +
-      'stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity=".9" />' +
-      marks + '</svg>';
-  }
-
   /* ---------- state ---------- */
   var S = {
     screen: "start", dir: "fwd",
@@ -270,8 +218,6 @@
         '<div class="sk-status"><span class="sk-status-title">Deine Tour</span></div>' +
         '<div class="phone-body" style="display:flex;flex-direction:column">' +
           '<div class="nav-row"><button class="nav-back" id="back"><span class="chev">‹</span> ' + esc(backLabel) + "</button></div>" +
-          '<div class="route-map-wrap"><div class="route-map">' + routeSVG(slice) +
-            '<span class="map-credit">Verlauf schematisch · kanu-info-isar.de</span></div></div>' +
           '<div class="ribbon">' + ribbon + "</div>" +
           note +
         "</div>" +

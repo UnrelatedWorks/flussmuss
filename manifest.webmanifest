@@ -1,0 +1,17 @@
+{
+  "name": "RiversOfMuc — Kanu-Tourenplaner",
+  "short_name": "RiversOfMuc",
+  "description": "Offline-Tourenplaner für Paddler auf Isar, Loisach, Ammer, Amper und Würm — mit Wehren, Umtragestellen und echten Karten.",
+  "lang": "de",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf8f1",
+  "theme_color": "#5b4b8a",
+  "categories": ["sports", "navigation", "travel"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

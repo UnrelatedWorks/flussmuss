@@ -1,6 +1,6 @@
 {
-  "name": "RiversOfMuc — Kanu-Tourenplaner",
-  "short_name": "RiversOfMuc",
+  "name": "Fluss Muss",
+  "short_name": "Fluss Muss",
   "description": "Offline-Tourenplaner für Paddler auf Isar, Loisach, Ammer, Amper und Würm — mit Wehren, Umtragestellen und echten Karten.",
   "lang": "de",
   "start_url": "./index.html",

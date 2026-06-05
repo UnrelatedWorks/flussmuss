@@ -1,17 +1,15 @@
 /* RiversOfMuc service worker
-   - Precaches the same-origin app shell so the planner opens offline.
-   - Runtime-caches cross-origin deps (React, Babel, Leaflet), Google Fonts and
-     CARTO/OSM map tiles with stale-while-revalidate, so after one online visit the
-     whole experience (incl. real maps already viewed) works without a network.
-*/
-const VERSION = "riversofmuc-v2";
+   Fully self-contained, single-origin PWA — no CDNs, fonts or map tiles to fetch.
+   Precaches the app shell so the planner opens offline; network-first when online
+   so code updates always propagate, with cache fallback when there's no network. */
+const VERSION = "riversofmuc-v4";
 const SHELL = VERSION + "-shell";
-const RUNTIME = VERSION + "-runtime";
 
-/* App shell — same-origin files required to boot. */
+/* App shell — fully self-contained, no external origins. */
 const SHELL_ASSETS = [
   "./index.html",
-  "./prototype.jsx",
+  "./app.js",
+  "./fonts.css",
   "./riverdata.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -31,7 +29,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== SHELL && k !== RUNTIME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -39,34 +37,17 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
-  const url = new URL(req.url);
-  const sameOrigin = url.origin === self.location.origin;
 
-  // Same-origin: cache-first (app shell + data), fall back to network and cache it.
-  if (sameOrigin) {
-    event.respondWith(
-      caches.match(req).then((hit) =>
-        hit ||
-        fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(SHELL).then((c) => c.put(req, copy));
-          return res;
-        }).catch(() => caches.match("./index.html"))
-      )
-    );
-    return;
-  }
-
-  // Cross-origin (CDN libs, fonts, map tiles): stale-while-revalidate.
+  // Same-origin (app shell + code + data): network-first so code updates always
+  // propagate, falling back to cache when offline. The app has no cross-origin
+  // dependencies, so this is the only strategy needed.
   event.respondWith(
-    caches.open(RUNTIME).then((cache) =>
-      cache.match(req).then((hit) => {
-        const network = fetch(req).then((res) => {
-          if (res && (res.ok || res.type === "opaque")) cache.put(req, res.clone());
-          return res;
-        }).catch(() => hit);
-        return hit || network;
-      })
+    fetch(req).then((res) => {
+      const copy = res.clone();
+      caches.open(SHELL).then((c) => c.put(req, copy));
+      return res;
+    }).catch(() =>
+      caches.match(req).then((hit) => hit || caches.match("./index.html"))
     )
   );
 });

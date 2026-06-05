@@ -3,20 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>FlussMuss</title>
-<meta name="description" content="Offline-Tourenplaner für Paddler auf Isar, Loisach, Ammer, Amper und Würm." />
+<title>Fluss Muss</title>
+<meta name="description" content="Offline-Tourenplaner für Paddler auf Isar, Loisach, Ammer, Amper und Würm — mit Wehren, Umtragestellen und echten Karten." />
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#5b4b8a" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="FlussMuss" />
+<meta name="apple-mobile-web-app-title" content="Fluss Muss" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Kalam:wght@400;700&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="fonts.css" />
 <style>
   :root {
     --paper: #faf8f1;
@@ -30,9 +27,13 @@
     --rough-radius: 240px 14px 220px 14px / 14px 220px 14px 240px;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; }
+  html, body { margin: 0; height: 100%; }
+  html { background: var(--paper); }
+  body { background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+  #root { height: 100%; }
 
-  /* ===== phone shell ===== */
+  /* ===== app shell — full viewport, no bezel ===== */
+  .app-stage { position: fixed; inset: 0; overflow: hidden; background: var(--paper); }
   .phone {
     width: 100%; height: 100%;
     background: var(--paper);
@@ -42,13 +43,13 @@
     overflow: hidden;
   }
   .sk-status {
-    display: flex; justify-content: space-between; align-items: center;
-    font-family: var(--font-hand); font-size: 14px; color: var(--muted);
-    padding: 9px 18px 4px; letter-spacing: .5px;
+    display: flex; justify-content: center; align-items: center;
+    font-family: var(--font-hand); font-size: 15px; color: var(--muted);
+    padding: calc(env(safe-area-inset-top, 0px) + 11px) 18px 4px; letter-spacing: .5px;
   }
-  .sk-status-title { color: var(--ink); font-size: 15px; }
+  .sk-status-title { color: var(--ink); font-size: 17px; }
   .phone-body { flex: 1; padding: 6px 22px 0; overflow: hidden; }
-  .phone-foot { padding: 14px 22px 22px; }
+  .phone-foot { padding: 14px 22px calc(env(safe-area-inset-bottom, 0px) + 22px); }
   .phone-foot.col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 
   /* ===== type ===== */
@@ -101,14 +102,12 @@
 
   /* ===== route map (real OSM/CARTO map · screen 3) ===== */
   .route-map-wrap { position: relative; flex: none; }
-  .route-map { position: relative; height: 150px; margin: 12px 0 0; overflow: hidden; background: var(--paper); }
-  .route-map .leaflet-tile-pane { filter: sepia(.18) saturate(.82) brightness(1.03) contrast(.96); }
-  .route-map .leaflet-container { background: var(--paper); font-family: var(--font-body); }
-  .route-img { width: 100%; height: 150px; object-fit: cover; display: block; }
-  .map-credit { position: absolute; right: 6px; bottom: 4px; z-index: 500; font-family: var(--font-body); font-size: 9px;
+  .route-map { position: relative; height: 150px; margin: 12px 0 0; overflow: hidden; background: var(--paper);
+    display: flex; align-items: center; justify-content: center; }
+  .route-svg { width: 100%; height: 100%; display: block; }
+  .route-empty { font-family: var(--font-hand); font-size: 14px; color: var(--muted); }
+  .map-credit { position: absolute; right: 6px; bottom: 4px; z-index: 5; font-family: var(--font-body); font-size: 9px;
     color: var(--muted); background: rgba(250,248,241,.72); padding: 0 4px; border-radius: 4px; }
-  .lf-port { display: block; width: 12px; height: 12px; background: rgba(122,46,34,.85);
-    border: 2px solid var(--paper); box-sizing: border-box; transform: rotate(45deg); }
   .slider-readout { text-align: center; font-family: var(--font-hand); font-size: 18px; margin: 4px 0; }
   .slider-readout b { font-size: 30px; color: var(--accent); }
   .sk-range { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; background: #ddd7c7; border-radius: 4px; outline: none; margin: 8px 0 4px; }
@@ -168,20 +167,7 @@
   .rib-s.warn { color: var(--accent2); }
   .rib-reenter { font-size: 12px; color: var(--accent); line-height: 1.2; margin-top: 1px; }
 
-  /* ===== PROTOTYPE: phone frame + flow ===== */
-  body.proto { min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: #e7e2d6; padding: 26px; }
-  body.proto::before { content: ""; position: fixed; inset: 0; pointer-events: none;
-    background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.022) 0 1px, transparent 1px 30px),
-                      repeating-linear-gradient(90deg, rgba(0,0,0,.022) 0 1px, transparent 1px 30px); }
-  .proto-stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  .proto-phone { position: relative; width: 384px; height: 812px; flex: none;
-    background: var(--paper); border: 3px solid var(--ink); border-radius: 40px; overflow: hidden;
-    transform-origin: center center; box-shadow: 0 22px 60px rgba(40,42,38,.22); }
-  body[data-rough="true"] .proto-phone { border-radius: 70px 48px 70px 48px / 48px 70px 48px 70px; }
-  .proto-phone .phone { position: absolute; inset: 0; }
-
-  /* screen transitions */
+  /* ===== screen transitions ===== */
   @keyframes scrFwd { from { transform: translateX(34px); } to { transform: none; } }
   @keyframes scrBack { from { transform: translateX(-34px); } to { transform: none; } }
   .scr-fwd { animation: scrFwd .24s ease both; }
@@ -201,7 +187,7 @@
     text-transform: uppercase; color: var(--accent); }
 
   /* end-of-planning modal */
-  .modal-back { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+  .modal-back { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
     padding: 28px; background: rgba(44,42,38,.44); animation: mFade .2s ease both; }
   @keyframes mFade { from { opacity: 0; } to { opacity: 1; } }
   .modal-card { background: var(--paper); border: 3px solid var(--ink); border-radius: var(--rough-radius);
@@ -239,38 +225,14 @@
   body { font-family: var(--font-body); }
 </style>
 </head>
-<body class="proto" data-rough="true">
+<body data-rough="true">
 <div id="root"></div>
 
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="riverdata.js"></script>
-<script type="text/babel" src="prototype.jsx"></script>
-
-<script type="text/babel">
-let __tries = 0;
-function mount() {
-  if (window.React && window.ReactDOM && window.PrototypeApp && window.RIVERS) {
-    ReactDOM.createRoot(document.getElementById("root")).render(<PrototypeApp />);
-    return;
-  }
-  if (__tries > 200) {
-    document.getElementById("root").innerHTML =
-      '<p style="font-family:system-ui,sans-serif;padding:48px;color:#6b6660">' +
-      'Konnte nicht laden. Bitte die Seite neu laden.</p>';
-    return;
-  }
-  __tries++;
-  setTimeout(mount, 30);
-}
-mount();
-</script>
+<script src="app.js"></script>
 
 <script>
-/* PWA service worker — precache the app shell, runtime-cache CDN libs, fonts and map tiles. */
+/* PWA service worker — precache the fully self-contained app shell (no external origins). */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js").catch(function (e) {

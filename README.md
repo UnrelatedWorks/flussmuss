@@ -22,4 +22,4 @@ python3 -m http.server 8137      # local test → http://localhost:8137
 
 ## Notes
 - Gauges (Pegel) are shown as route waypoints but **not live** yet (planned: HND Bayern).
-- All data © Christian Löhnert · kanu-info-isar.de, reused with permission + attribution.
+- All data © Christian Löhnert · kanu-info-isar.de, reused with "permission" + attribution.

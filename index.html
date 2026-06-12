@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Fluss Muss</title>
-<meta name="description" content="Offline-Tourenplaner für Paddler auf Isar, Loisach, Ammer, Amper und Würm — mit Wehren, Umtragestellen und echten Karten." />
+<meta name="description" content="Offline-Tourenplaner für Paddler auf Isar, Loisach, Ammer, Amper und Würm sowie Ardèche, Dordogne und Tarn — mit Wehren, Umtragestellen, Pegeln und echten Karten." />
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#5b4b8a" />
 <meta name="mobile-web-app-capable" content="yes" />
@@ -166,6 +166,37 @@
   .gl-term { font-family: var(--font-hand); font-size: 19px; line-height: 1.1; }
   .gl-def { font-size: 13px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
 
+  /* ===== pegel (HND Meldestufen) ===== */
+  .pg-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding: 2px 1px 16px; }
+  .pg-group { font-family: var(--font-hand); font-size: 16px; color: var(--accent); letter-spacing: .5px; margin: 14px 2px 5px; }
+  .pg-row { display: flex; gap: 11px; align-items: flex-start; padding: 9px 6px; border-bottom: 1.5px solid #e2ddd0;
+    text-decoration: none; color: inherit; border-radius: 10px; -webkit-tap-highlight-color: transparent; }
+  .pg-row:active { background: rgba(91,75,138,.08); }
+  .pg-ms { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 2.5px solid; margin-top: 2px;
+    display: flex; align-items: center; justify-content: center; font-family: var(--font-hand); font-size: 18px; }
+  body[data-rough="true"] .pg-ms { border-radius: 40% 60% 55% 45% / 55% 45% 60% 40%; }
+  .ms-none { color: #9a958a; border-color: #cfc9ba; }
+  .ms-0 { color: #3f7d4e; border-color: #3f7d4e; background: rgba(63,125,78,.08); }
+  .ms-ok { color: #3f7d4e; border-color: #3f7d4e; background: rgba(63,125,78,.08); }
+  .ms-stop { color: #faf8f1; border-color: #c22a1c; background: #c22a1c; }
+  .pg-country, .picker-country { font-family: var(--font-hand); font-size: 14px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted); margin: 18px 2px 0; padding-bottom: 2px;
+    border-bottom: 2px solid #e2ddd0; }
+  .picker-country { margin: 14px 2px 0; }
+  .ms-1 { color: #8f7706; border-color: #c9a80a; background: rgba(201,168,10,.14); }
+  .ms-2 { color: #b35f00; border-color: #d97a00; background: rgba(217,122,0,.14); }
+  .ms-3 { color: #c22a1c; border-color: #c22a1c; background: rgba(194,42,28,.14); }
+  .ms-4 { color: #7a1fa2; border-color: #7a1fa2; background: rgba(122,31,162,.14); }
+  .pg-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pg-name { font-family: var(--font-hand); font-size: 18px; line-height: 1.15; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .pg-vals { font-size: 13px; color: var(--ink); margin-top: 2px; }
+  .pg-vals b { font-weight: 700; }
+  .pg-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; line-height: 1.3; }
+  .pg-ext { flex: none; color: var(--muted); font-size: 15px; margin-top: 9px; }
+  .pg-legend { border: 2px solid #e2ddd0; border-radius: 12px; padding: 10px 12px; margin: 16px 0 4px;
+    font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .pg-legend b { color: var(--ink); }
+
   /* ===== info ===== */
   .info-sec { margin: 0 0 14px; }
   .info-h { font-family: var(--font-hand); font-size: 19px; color: var(--accent); margin: 0 0 3px; }
@@ -229,6 +260,9 @@
 
 <script src="vendor/leaflet.js"></script>
 <script src="riverdata.js"></script>
+<script src="riverdata-fr.js"></script>
+<script src="pegeldata.js"></script>
+<script src="pegeldata-fr.js"></script>
 <script src="glossary.js"></script>
 <script src="app.js"></script>
 <script>

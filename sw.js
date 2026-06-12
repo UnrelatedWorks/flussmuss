@@ -5,7 +5,7 @@
    - Cross-origin CARTO/OSM map tiles use stale-while-revalidate, so a route's
      map keeps working offline once it has been viewed online.
 */
-const VERSION = "flussmuss-v1";
+const VERSION = "flussmuss-v3";
 const SHELL = VERSION + "-shell";
 const RUNTIME = VERSION + "-runtime";
 
@@ -14,6 +14,9 @@ const SHELL_ASSETS = [
   "./index.html",
   "./app.js",
   "./riverdata.js",
+  "./riverdata-fr.js",
+  "./pegeldata.js",
+  "./pegeldata-fr.js",
   "./glossary.js",
   "./fonts.css",
   "./manifest.webmanifest",
@@ -50,6 +53,10 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
+
+  // Hub'Eau-Live-Pegel nie cachen/abfangen — Offline-Fallback ist der
+  // Snapshot in pegeldata-fr.js, nicht ein veralteter Cache-Treffer.
+  if (url.hostname === "hubeau.eaufrance.fr") return;
 
   // Same-origin: cache-first, fall back to network and cache it; nav fallback to index.
   if (sameOrigin) {

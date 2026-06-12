@@ -13,6 +13,100 @@
   var GLOSSARY = window.GLOSSARY || [];
   var ATTRIB = window.RIVER_ATTRIBUTION || "Christian Löhnert · kanu-info-isar.de";
 
+  /* Pegel-Snapshots: Bayern (pegeldata.js · HND) + Frankreich (pegeldata-fr.js · Hub'Eau) */
+  var PEGEL = window.PEGEL || [];
+  var PEGEL_STAND = window.PEGEL_STAND || "";
+  var PEGEL_LEGEND = window.PEGEL_LEGEND || [];
+  var PEGEL_TH = window.PEGEL_THRESHOLDS || {};
+  var PEGEL_FR = window.PEGEL_FR || [];
+  var PEGEL_FR_STAND = window.PEGEL_FR_STAND || "";
+  var PEGEL_FR_LEGEND = window.PEGEL_FR_LEGEND || "";
+  var PEGEL_FR_TH = window.PEGEL_FR_THRESHOLDS || {};
+  var PEGEL_MATCH = Object.assign({}, window.PEGEL_MATCH || {}, window.PEGEL_FR_MATCH || {});
+  var PEGEL_BY_ID = {};
+  PEGEL.concat(PEGEL_FR).forEach(function (g) { if (g.id) PEGEL_BY_ID[g.id] = g; });
+  var TOUR_GAUGE_IDS = {};
+  Object.keys(PEGEL_MATCH).forEach(function (k) { TOUR_GAUGE_IDS[PEGEL_MATCH[k]] = k; });
+  function gaugeFor(river, nodeName) {
+    var id = PEGEL_MATCH[river + "|" + nodeName];
+    return id ? PEGEL_BY_ID[id] : null;
+  }
+  function countryOf(river) { return (RIVER_META[river] || {}).country || "Bayern"; }
+  function msClass(ms) { return ms == null ? "ms-none" : "ms-" + ms; }
+  function thLine(id) {
+    var th = PEGEL_TH[id];
+    if (!th) return "";
+    var parts = [];
+    [1, 2, 3, 4].forEach(function (s) { if (th["ms" + s] != null) parts.push(s + " ab " + th["ms" + s] + " cm"); });
+    return parts.length ? "Meldestufe " + parts.join(" · ") : "";
+  }
+  function gaugeVals(g) {
+    var v = [];
+    if (g.cm) v.push(g.cm + " cm" + (g.d && g.d !== "0" ? " (" + g.d + ")" : ""));
+    if (g.q) v.push(g.q + " m³/s");
+    return v.join(" · ");
+  }
+
+  /* ---------- Live-Pegel Frankreich (Hub'Eau Hydrométrie, CORS offen) ---------- */
+  var LIVE = { data: {}, at: 0, pending: false };
+  var LIVE_TTL = 5 * 60 * 1000;
+  function frVals(g) {
+    var l = LIVE.data[g.id];
+    if (l && (l.cm != null || l.q)) return { cm: l.cm, q: l.q, t: l.t, live: true };
+    return { cm: g.cm, q: g.q, t: g.t, live: false };
+  }
+  function frBadge(g) {
+    var th = PEGEL_FR_TH[g.id];
+    var v = frVals(g);
+    var cm = v.cm == null ? NaN : parseFloat(String(v.cm).replace(",", "."));
+    if (!th || isNaN(cm)) return { cls: "ms-none", txt: "–", word: "" };
+    if (th.sperre != null && cm >= th.sperre) return { cls: "ms-stop", txt: "✕", word: "NICHT fahren!" };
+    if (th.warn != null && cm >= th.warn) return { cls: "ms-2", txt: "!", word: "Vorsicht!" };
+    return { cls: "ms-ok", txt: "✓", word: "befahrbar" };
+  }
+  function thLineFr(id) {
+    var th = PEGEL_FR_TH[id];
+    if (!th) return "";
+    var p = [];
+    if (th.warn != null) p.push("Vorsicht ab " + th.warn + " cm");
+    if (th.sperre != null) p.push("nicht fahren ab " + th.sperre + " cm");
+    return p.join(" · ");
+  }
+  function refreshFrLive() {
+    if (!PEGEL_FR.length || LIVE.pending || (Date.now() - LIVE.at) < LIVE_TTL) return;
+    LIVE.pending = true;
+    var codes = PEGEL_FR.map(function (g) { return g.id; }).join(",");
+    fetch("https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=" + codes +
+      "&grandeur_hydro=H,Q&sort=desc&size=300&fields=code_station,grandeur_hydro,resultat_obs,date_obs")
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var seen = {};
+        (j.data || []).forEach(function (o) {
+          var k = o.code_station + "|" + o.grandeur_hydro;
+          if (seen[k]) return;
+          seen[k] = 1;
+          var e = LIVE.data[o.code_station] || (LIVE.data[o.code_station] = {});
+          var d = new Date(o.date_obs);
+          var t = ("0" + d.getDate()).slice(-2) + "." + ("0" + (d.getMonth() + 1)).slice(-2) + ". " +
+                  ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+          if (o.grandeur_hydro === "H") { e.cm = String(Math.round(o.resultat_obs / 10)); e.t = t; }
+          else {
+            var q = o.resultat_obs / 1000;
+            e.q = (q < 1 ? q.toFixed(2) : q < 10 ? q.toFixed(1) : String(Math.round(q))).replace(".", ",");
+            if (!e.t) e.t = t;
+          }
+        });
+        LIVE.at = Date.now();
+        LIVE.pending = false;
+        // nur neu zeichnen, wo Live-Werte sichtbar sind — und nie unterm tippenden Finger
+        if (S.screen === "pegel" || S.screen === "tour") {
+          var sf = root.querySelector("#pgSearch");
+          if (!sf || document.activeElement !== sf) render();
+        }
+      })
+      .catch(function () { LIVE.pending = false; LIVE.at = Date.now(); });
+  }
+
   /* ---------- helpers ---------- */
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
@@ -103,7 +197,7 @@
     city: firstTown.city, river: firstTown.river,
     dest: null, sel: 0, tourIdx: 0,
     picker: false, destPicker: false, showEnd: false,
-    glossQ: ""
+    glossQ: "", pegelQ: ""
   };
   function timeHours() { return S.time === "eigene" ? S.customH : parseInt(S.time, 10); }
   function tours() { return buildTours(S.river, S.city, timeHours(), S.dest); }
@@ -121,6 +215,7 @@
   function topNav(active) {
     return '<div class="sk-status">' +
       '<button class="topnav' + (active === "plan" ? " on" : "") + '" id="navPlan">Planen</button>' +
+      '<button class="topnav' + (active === "pegel" ? " on" : "") + '" id="navPegel">Pegel</button>' +
       '<button class="topnav' + (active === "gloss" ? " on" : "") + '" id="navGloss">Begriffe</button>' +
       '<button class="topnav' + (active === "info" ? " on" : "") + '" id="navInfo">Info</button>' +
       "</div>";
@@ -223,10 +318,31 @@
     var ribbon = slice.map(function (n, i) {
       var first = i === 0, last = i === slice.length - 1;
       var warn = (n.type === "port" || n.type === "caution");
+      var live = "";
+      if (n.type === "gauge") {
+        var g = gaugeFor(S.river, n.name);
+        if (g && g.fr) {
+          var fv = frVals(g), fb = frBadge(g);
+          var bits = [];
+          if (fv.cm != null && fv.cm !== "") bits.push(fv.cm + " cm");
+          if (fv.q) bits.push(fv.q + " m³/s");
+          live = '<div class="rib-s" style="color:var(--gauge)">' + esc(bits.join(" · ")) +
+            (fb.word ? " · " + esc(fb.word) : "") +
+            (fv.t ? (fv.live ? " · ● live " : " · Stand ") + esc(fv.t) : "") +
+            ' · <a href="' + esc(g.u) + '" target="_blank" rel="noopener" style="color:var(--gauge)">Pegel ↗</a></div>';
+        } else if (g) {
+          var vals = gaugeVals(g);
+          live = '<div class="rib-s" style="color:var(--gauge)">' +
+            (vals ? esc(vals) + " · " : "") + "Meldestufe " + (g.ms == null ? "–" : esc(g.ms)) +
+            (g.t ? " · " + esc(g.t) : "") +
+            ' · <a href="' + esc(g.u) + '" target="_blank" rel="noopener" style="color:var(--gauge)">live ↗</a></div>';
+        }
+      }
       return '<div class="rib"><span class="rib-dot' + ribDot(n.type, first, last) + '"></span>' +
         '<span class="rib-km">km ' + fmt1(n.km - base) + "</span>" +
         '<div class="rib-t">' + esc(nodeLabel(n, first, last)) +
           (n.type === "gauge" ? ' <span class="rib-badge">Pegel</span>' : "") + "</div>" +
+        live +
         (n.note ? '<div class="rib-s' + (warn ? " warn" : "") + '">' + esc(n.note) + "</div>" : "") +
         (n.reentry ? '<div class="rib-reenter">↪ ' + esc(n.reentry) + "</div>" : "") +
       "</div>";
@@ -236,6 +352,10 @@
       ? '<p class="sk-cap left" style="margin:8px 2px 0;font-size:12.5px;line-height:1.35">Datenbasis ' + esc(S.river) +
         ": " + meta.portages + " Umtragestellen, " + meta.cautions + " Vorsicht-Stellen erfasst (Vermessung " +
         esc(meta.surveyYear) + ") · kanu-info-isar.de</p>"
+      : meta.source
+      ? '<p class="sk-cap left" style="margin:8px 2px 0;font-size:12.5px;line-height:1.35">Datenbasis ' + esc(S.river) +
+        ": " + meta.portages + " Umtragestellen, " + meta.cautions + " Vorsicht-Stellen erfasst · Quellen: " +
+        esc(meta.source) + "</p>"
       : "";
     return '<div class="phone"><div class="sk-status"><span class="sk-status-title">Deine Tour</span></div>' +
         '<div class="phone-body" style="display:flex;flex-direction:column">' +
@@ -271,10 +391,28 @@
       var first = i === 0, last = i === pts.length - 1;
       var color = (first || last) ? "#2c2a26" : (COLORS[n.type] || "#5b4b8a");
       var r = (first || last) ? 8 : (n.type === "town" ? 5 : 6);
+      var liveHtml = "";
+      if (n.type === "gauge") {
+        var g = gaugeFor(S.river, n.name);
+        if (g && g.fr) {
+          var fv = frVals(g), fb = frBadge(g);
+          var bits = [];
+          if (fv.cm != null && fv.cm !== "") bits.push(fv.cm + " cm");
+          if (fv.q) bits.push(fv.q + " m³/s");
+          liveHtml = '<br><span style="color:#3a6ea5">' + esc(bits.join(" · ")) +
+            (fb.word ? " · " + esc(fb.word) : "") + "</span>" +
+            ' <a href="' + esc(g.u) + '" target="_blank" rel="noopener">Pegel ↗</a>';
+        } else if (g) {
+          liveHtml = '<br><span style="color:#3a6ea5">' + esc(gaugeVals(g)) +
+            " · MS " + (g.ms == null ? "–" : esc(g.ms)) + "</span>" +
+            ' <a href="' + esc(g.u) + '" target="_blank" rel="noopener">live ↗</a>';
+        }
+      }
       L.circleMarker(n.latlng, {
         radius: r, color: "#faf8f1", weight: 2, fillColor: color, fillOpacity: 1
       }).addTo(map).bindPopup(
         "<b>" + esc(nodeLabel(n, first, last)) + "</b>" + (n.note ? "<br>" + esc(n.note) : "") +
+        liveHtml +
         (n.est ? '<br><i style="opacity:.6">Position geschätzt</i>' : "")
       );
     });
@@ -304,10 +442,87 @@
       "</div>";
   }
 
+  /* ---------- Pegel & Meldestufen (HND Bayern Snapshot) ---------- */
+  function pegelRow(g, showRiver) {
+    var tourKey = TOUR_GAUGE_IDS[g.id];
+    var badgeCls, badgeTxt, th, vals, when;
+    if (g.fr) {
+      var v = frVals(g), fb = frBadge(g);
+      badgeCls = fb.cls; badgeTxt = fb.txt;
+      th = thLineFr(g.id);
+      vals = [];
+      if (v.cm != null && v.cm !== "") vals.push(v.cm + " cm");
+      if (v.q) vals.push(v.q + " m³/s");
+      vals = vals.join(" · ");
+      when = v.t ? (v.live ? '<small style="color:#3f7d4e"> · ● live ' + esc(v.t) + "</small>"
+                           : ' <small style="color:var(--muted)">· Stand ' + esc(v.t) + "</small>") : "";
+    } else {
+      badgeCls = msClass(g.ms); badgeTxt = g.ms == null ? "–" : esc(g.ms);
+      th = thLine(g.id);
+      vals = gaugeVals(g);
+      when = g.t ? ' <small style="color:var(--muted)">· ' + esc(g.t) + "</small>" : "";
+    }
+    return '<a class="pg-row" href="' + esc(g.u || "https://www.hnd.bayern.de") + '" target="_blank" rel="noopener">' +
+      '<span class="pg-ms ' + badgeCls + '">' + badgeTxt + "</span>" +
+      '<span class="pg-text">' +
+        '<span class="pg-name">' + esc(g.n) +
+          (showRiver ? ' <small style="color:var(--muted);font-size:13px">~ ' + esc(g.r) + "</small>" : "") +
+          (tourKey ? ' <span class="rib-badge">Tour-Punkt</span>' : "") + "</span>" +
+        (vals ? '<span class="pg-vals"><b>' + esc(vals) + "</b>" + when + "</span>" : '<span class="pg-vals" style="color:var(--muted)">keine aktuellen Werte</span>') +
+        (th ? '<span class="pg-sub">' + esc(th) + "</span>" : "") +
+      "</span>" +
+      '<span class="pg-ext">↗</span></a>';
+  }
+  function pegelHTML() {
+    var q = S.pegelQ.trim().toLowerCase();
+    var ALL = PEGEL.concat(PEGEL_FR);
+    var inner;
+    if (q) {
+      var hits = ALL.filter(function (g) {
+        return g.n.toLowerCase().indexOf(q) >= 0 || g.r.toLowerCase().indexOf(q) >= 0;
+      });
+      var shown = hits.slice(0, 80);
+      inner = '<p class="res-count" style="margin:8px 0 2px">' + hits.length +
+        ' <small>von ' + ALL.length + " Pegeln (Bayern + Frankreich)</small></p>" +
+        shown.map(function (g) { return pegelRow(g, true); }).join("") +
+        (hits.length > shown.length ? '<p class="sk-cap left">… und ' + (hits.length - shown.length) + " weitere — Suche eingrenzen.</p>" : "") +
+        (hits.length === 0 ? '<p class="sk-cap left">Kein Pegel gefunden.</p>' : "");
+    } else {
+      var lastCountry = null;
+      inner = RIVER_ORDER.map(function (river) {
+        var c = countryOf(river);
+        var rows = (c === "Frankreich" ? PEGEL_FR : PEGEL).filter(function (g) { return g.r === river; });
+        if (!rows.length) return "";
+        var head = "";
+        if (c !== lastCountry) { lastCountry = c; head = '<div class="pg-country">' + esc(c) + "</div>"; }
+        return head + '<div class="pg-group">~ ' + esc(river) + "</div>" +
+          rows.map(function (g) { return pegelRow(g, false); }).join("");
+      }).join("");
+    }
+    var legend = '<div class="pg-legend"><b>Bayern: Meldestufen</b> — Ausmaß der Überflutung:<br>' +
+      PEGEL_LEGEND.map(function (l) { return "<b>" + l.s + "</b> " + esc(l.t); }).join("<br>") +
+      '<br><br>Werte: Hochwassernachrichtendienst Bayern · <a href="https://www.hnd.bayern.de/pegel/meldestufen/tabellen" target="_blank" rel="noopener" style="color:var(--accent)">hnd.bayern.de</a> (Bayer. Landesamt für Umwelt).<br>' +
+      "Kein Live-Abruf: Stand <b>" + esc(PEGEL_STAND) + "</b>. Pegel antippen → aktuelle Werte &amp; Vorhersage beim HND. Ab Meldestufe 1 gehört niemand aufs Wasser.</div>";
+    var legendFr = PEGEL_FR.length
+      ? '<div class="pg-legend"><b>Frankreich: Befahrungsregeln</b> — ' + esc(PEGEL_FR_LEGEND) +
+        '<br><br>Werte: Hub\'Eau Hydrométrie · <a href="https://hubeau.eaufrance.fr" target="_blank" rel="noopener" style="color:var(--accent)">hubeau.eaufrance.fr</a> (eaufrance/SCHAPI, Open Data) — ● live aus der API, offline Stand <b>' +
+        esc(PEGEL_FR_STAND) + "</b>. Pegel antippen → HydroPortail. Hochwasser-Lage: vigicrues.gouv.fr.</div>"
+      : "";
+    return '<div class="phone">' + topNav("pegel") +
+        '<div class="phone-body" style="display:flex;flex-direction:column">' +
+          '<h1 class="sk-h1" style="margin:6px 0 6px">Pegel &amp; Meldestufen</h1>' +
+          '<input class="gl-search" id="pgSearch" type="search" placeholder="Pegel in Bayern &amp; Frankreich suchen …" value="' + esc(S.pegelQ) + '" />' +
+          '<div class="pg-list">' + inner + legend + legendFr + "</div>" +
+        "</div>" +
+        '<div class="phone-foot col"><p class="sk-cap" style="margin:0">Bayern: Stand ' + esc(PEGEL_STAND) + " · Frankreich: live (Hub'Eau)</p></div>" +
+      "</div>";
+  }
+
   /* ---------- Info / reference ---------- */
   var INFO_SECTIONS = [
     { h: "Die Isar ist ein Wildfluss", p: "Isar, Loisach, Ammer & Co. sind keine zahmen Kanäle. Wasserstände schwanken, Kiesbänke, Bäume und Wehre verändern sich laufend. Plane defensiv, steige bei Unsicherheit aus und trage im Zweifel um. Bei Hochwasser (Meldestufen) gehört niemand aufs Wasser." },
-    { h: "Wasserstand & Pegel", p: "Ob ein Abschnitt geht, hängt am Pegel. Viele Strecken brauchen eine Mindest-Wassermenge (z. B. Restwasserstrecken der Amper). Aktuelle Pegel liefert der Hochwassernachrichtendienst Bayern (hnd.bayern.de) — diese App zeigt sie (noch) nicht live." },
+    { h: "Wasserstand & Pegel", p: "Ob ein Abschnitt geht, hängt am Pegel. Viele Strecken brauchen eine Mindest-Wassermenge (z. B. Restwasserstrecken der Amper). Der Reiter „Pegel“ zeigt Wasserstand, Abfluss und Meldestufen aller bayerischen Pegel (hnd.bayern.de, gespeicherter Stand — fürs Live-Bild Pegel antippen) und die französischen Pegel live von Hub'Eau (eaufrance)." },
+    { h: "Frankreich: Ardèche, Dordogne & Tarn", p: "Die drei Kanu-Klassiker Frankreichs sind als komplette Touren enthalten. Dort gelten eigene Regeln: Befahrungsverbote per Arrêté préfectoral (Pegelgrenzen, z. B. Gorges de l'Ardèche), Reservierungspflicht für die Biwaks Gaud & Gournier, Helmpflicht unterhalb Les Vignes (Tarn) — und der Pas de Soucy im Tarn ist absolut unbefahrbar: Lebensgefahr, zwingend umtragen!" },
     { h: "Umtragen & Hindernisse", p: "Wehre, Sohlrampen und E-Werke sind in den Touren als ⚑ Umtragestellen und ⚠ Vorsicht-Stellen markiert — mit Seite, Trageweg und Wiedereinsetzpunkt aus den Originalkarten. Erkundige dich vor Ort, ob noch alles stimmt." },
     { h: "Mehrtägige Fahrten & Übernachten", p: "Für längere Touren (eigene Zeit ab 10 h) plane Übernachtung und Logistik im Voraus. Wildcampen ist in Bayern stark eingeschränkt — nutze offizielle Plätze." }
   ];
@@ -323,11 +538,11 @@
     return '<div class="phone">' + topNav("info") +
         '<div class="phone-body" style="overflow-y:auto">' +
           '<h1 class="sk-h1" style="margin:6px 0 4px">Gut zu wissen</h1>' +
-          '<p class="sk-cap left" style="margin:0 0 10px">Fluss Muss ist ein Offline-Tourenplaner für Isar, Loisach, Ammer, Amper und Würm.</p>' +
+          '<p class="sk-cap left" style="margin:0 0 10px">Fluss Muss ist ein Offline-Tourenplaner für Isar, Loisach, Ammer, Amper und Würm — plus die Kanu-Klassiker Ardèche, Dordogne und Tarn in Frankreich.</p>' +
           secs +
           '<div class="info-h" style="margin-top:16px">Datenbasis</div>' +
           '<div class="info-stats">' + stats + "</div>" +
-          '<p class="sk-cap left" style="margin:14px 0 4px;line-height:1.4">Alle Routen, Karten und Begriffe stammen aus dem Lebenswerk von <b>Christian Löhnert</b> auf <a href="http://kanu-info-isar.de" target="_blank" rel="noopener">kanu-info-isar.de</a> — mit freundlicher Genehmigung zur Weiterverwendung mit Urheberangabe.</p>' +
+          '<p class="sk-cap left" style="margin:14px 0 4px;line-height:1.4">Die bayerischen Routen, Karten und Begriffe stammen aus dem Lebenswerk von <b>Christian Löhnert</b> auf <a href="http://kanu-info-isar.de" target="_blank" rel="noopener">kanu-info-isar.de</a> — mit freundlicher Genehmigung zur Weiterverwendung mit Urheberangabe. Frankreich-Routen: zusammengetragen aus amtlichen und Kanu-Quellen (Préfecture de l\'Ardèche, tarn-amont.fr, OT Vallée de la Dordogne, eauxvives.org). Pegel: HND Bayern · Hub\'Eau/SCHAPI (Open Data).</p>' +
           '<p class="sk-cap left" style="margin:0 0 20px;opacity:.7">' + esc(ATTRIB) + "</p>" +
         "</div>" +
       "</div>";
@@ -335,13 +550,16 @@
 
   /* ---------- modals ---------- */
   function cityPickerHTML() {
+    var lastCountry = null;
     var groups = RIVER_ORDER.map(function (river) {
       var rows = towns(river).map(function (o) {
         return '<button class="picker-row' + (S.city === o.n.name ? " sel" : "") + '" data-city="' + esc(o.n.name) + '" data-river="' + esc(river) + '">' +
           '<span class="picker-pin">◎</span><span class="picker-city">' + esc(o.n.name) + "</span>" +
           '<span class="picker-note">' + esc((o.n.note || "").slice(0, 48)) + "</span></button>";
       }).join("");
-      return '<div class="picker-group">~ ' + esc(river) + "</div>" + rows;
+      var c = countryOf(river), head = "";
+      if (c !== lastCountry) { lastCountry = c; head = '<div class="picker-country">' + esc(c) + "</div>"; }
+      return head + '<div class="picker-group">~ ' + esc(river) + "</div>" + rows;
     }).join("");
     return modalWrap("cityPicker",
       '<div class="modal-card picker-card" data-stop>' +
@@ -384,12 +602,14 @@
     switch (S.screen) {
       case "list": return listHTML();
       case "tour": return tourHTML();
+      case "pegel": return pegelHTML();
       case "gloss": return glossaryHTML();
       case "info": return infoHTML();
       default: return startHTML();
     }
   }
   function render() {
+    if (S.screen === "pegel" || (S.screen === "tour" && countryOf(S.river) === "Frankreich")) refreshFrLive();
     if (S.screen !== "tour") destroyMap();
     var modal = "";
     if (S.screen === "start" && S.picker) modal = cityPickerHTML();
@@ -410,6 +630,7 @@
 
   function bindNav() {
     on("#navPlan", "click", function () { if (S.screen !== "start") nav("start", "back"); });
+    on("#navPegel", "click", function () { if (S.screen !== "pegel") nav("pegel", "fwd"); });
     on("#navGloss", "click", function () { if (S.screen !== "gloss") nav("gloss", "fwd"); });
     on("#navInfo", "click", function () { if (S.screen !== "info") nav("info", "fwd"); });
   }
@@ -451,6 +672,15 @@
         render();
         var s2 = root.querySelector("#glSearch");
         if (s2) { s2.focus(); try { s2.setSelectionRange(pos, pos); } catch (x) {} }
+      });
+    } else if (S.screen === "pegel") {
+      var psrch = root.querySelector("#pgSearch");
+      if (psrch) psrch.addEventListener("input", function (e) {
+        S.pegelQ = e.target.value;
+        var pos = e.target.selectionStart;
+        render();
+        var p2 = root.querySelector("#pgSearch");
+        if (p2) { p2.focus(); try { p2.setSelectionRange(pos, pos); } catch (x) {} }
       });
     }
 
